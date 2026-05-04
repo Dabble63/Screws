@@ -1,0 +1,25 @@
+{
+  "short_name": "Hardware",
+  "name": "Hardware Container Inventory",
+  "description": "Manage your hardware container inventory offline",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "index.html",
+  "scope": "./",
+  "background_color": "#f9f9f9",
+  "theme_color": "#0056b3",
+  "display": "standalone",
+  "orientation": "any"
+}

@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0056b3">
+    <meta name="description" content="Manage your hardware container inventory offline">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Hardware">
+    <title>Hardware Container Inventory</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background-color: #f9f9f9; }
+        h1 { color: #333; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select, button { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #0056b3; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .hidden { display: none; }
+        .toolbar { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .toolbar button { width: auto; padding: 10px 20px; }
+        
+        /* Mobile optimizations */
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .card { padding: 15px; }
+            th, td { padding: 5px; font-size: 14px; }
+            .toolbar { flex-direction: column; }
+            .toolbar button { width: 100%; }
+            table { font-size: 13px; }
+            button { font-size: 14px; padding: 8px; }
+            .filter-container { flex-direction: column; }
+            .filter-container > div { width: 100%; }
+            .filter-container input, .filter-container select { width: 100%; }
+        }
+        
+        /* Table scroll on mobile */
+        .table-wrapper { overflow-x: auto; }
+        .filter-container { display: flex; gap: 10px; margin-bottom: 15px; }
+        .install-banner { background-color: #28a745; color: white; padding: 10px; text-align: center; display: none; }
+        .install-banner button { background-color: white; color: #28a745; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="install-banner" id="installBanner">
+        <p>Install this app for offline use! <button onclick="installApp()">Install Now</button> <button onclick="dismissInstallBanner()" style="background-color: transparent; color: white;">Dismiss</button></p>
+    </div>
+
+    <h1>Hardware Container Inventory</h1>
+
+    <div class="toolbar">
+        <button onclick="toggleAddForm()" style="background-color:#28a745;">+ Add Item</button>
+        <button onclick="exportData()" style="background-color:#17a2b8;">Export JSON</button>
+        <button onclick="importData()" style="background-color:#ffc107; color:#000;">Import JSON</button>
+    </div>
+    <input type="file" id="fileInput" accept=".json" style="display:none;" onchange="handleFileImport(event)">
+
+    <div class="card hidden" id="addItemCard">
+        <h3>Add Item to Container</h3>
+        <div class="form-group">
+            <label for="category">Category:</label>
+            <select id="category">
+                <option value="Screw">Screw</option>
+                <option value="Nut">Nut</option>
+                <option value="Washer">Washer</option>
+                <option value="Other">Other Hardware</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="size">Size:</label>
+            <input type="text" id="size" list="size-list" placeholder="Select or enter custom size">
+            <datalist id="size-list">
+                <option value="M3">
+                <option value="M4">
+                <option value="M5">
+                <option value="M6">
+                <option value="M8">
+                <option value="M10">
+                <option value="M12">
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label for="length">Length:</label>
+            <input type="text" id="length" list="length-list" placeholder="Select or enter custom length">
+            <datalist id="length-list">
+                <option value="6mm">
+                <option value="8mm">
+                <option value="10mm">
+                <option value="12mm">
+                <option value="16mm">
+                <option value="20mm">
+                <option value="25mm">
+                <option value="30mm">
+                <option value="40mm">
+                <option value="50mm">
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label for="material">Material:</label>
+            <select id="material">
+                <option value="">Select material...</option>
+                <option value="Machine">Machine</option>
+                <option value="Wood">Wood</option>
+                <option value="Metal">Metal</option>
+                <option value="Plastic">Plastic</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="headType">Head Type:</label>
+            <select id="headType">
+                <option value="">Select head type...</option>
+                <option value="Flat">Flat</option>
+                <option value="Phillips">Phillips</option>
+                <option value="Hex">Hex</option>
+                <option value="Star">Star</option>
+                <option value="Square">Square</option>
+                <option value="Pan">Pan</option>
+                <option value="Button">Button</option>
+                <option value="Socket">Socket</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="name">Description:</label>
+            <input type="text" id="name" placeholder="e.g., M4 Screws, Washers">
+        </div>
+        <div class="form-group">
+            <label for="row">Container Row:</label>
+            <input type="number" id="row" placeholder="e.g., 5">
+        </div>
+        <div class="form-group">
+            <label for="col">Container Column:</label>
+            <input type="text" id="col" placeholder="e.g., A">
+        </div>
+        <div class="form-group">
+            <label for="quantity">Quantity:</label>
+            <input type="number" id="quantity" value="1">
+        </div>
+        <button onclick="addItem()">Add to Database</button>
+    </div>
+
+    <div class="card">
+        <h3>Current Inventory</h3>
+        <div class="filter-container">
+            <div>
+                <label for="filterCategory" style="margin-bottom: 5px;">Filter by Category:</label>
+                <select id="filterCategory" onchange="displayItems()">
+                    <option value="">All Categories</option>
+                    <option value="Screw">Screw</option>
+                    <option value="Nut">Nut</option>
+                    <option value="Washer">Washer</option>
+                    <option value="Other">Other Hardware</option>
+                </select>
+            </div>
+            <div>
+                <label for="filterSize" style="margin-bottom: 5px;">Filter by Size:</label>
+                <input type="text" id="filterSize" list="filter-size-list" onkeyup="displayItems()" placeholder="e.g., M4">
+                <datalist id="filter-size-list">
+                    <option value="M3">
+                    <option value="M4">
+                    <option value="M5">
+                    <option value="M6">
+                    <option value="M8">
+                    <option value="M10">
+                    <option value="M12">
+                </datalist>
+            </div>
+            <div style="align-self: flex-end;">
+                <button onclick="clearFilters()" style="background-color: #6c757d;">Clear Filters</button>
+            </div>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Description</th>
+                        <th>Size</th>
+                        <th>Length</th>
+                        <th>Material</th>
+                        <th>Head Type</th>
+                        <th>Row</th>
+                        <th>Col</th>
+                        <th>Qty</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-table">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let deferredPrompt;
+
+        // Capture the install prompt event
+        window.addEventListener('beforeinstallprompt', (e) => {
+            console.log('beforeinstallprompt event fired');
+            // Prevent the mini-infobar from appearing
+            e.preventDefault();
+            // Store the event for later use
+            deferredPrompt = e;
+            // Show the install banner
+            document.getElementById('installBanner').style.display = 'block';
+        });
+
+        // Handle the install button click
+        function installApp() {
+            if (deferredPrompt) {
+                // Show the install prompt
+                deferredPrompt.prompt();
+                // Wait for the user's response
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted the install prompt');
+                    } else {
+                        console.log('User dismissed the install prompt');
+                    }
+                    deferredPrompt = null;
+                    document.getElementById('installBanner').style.display = 'none';
+                });
+            } else {
+                console.log('Install prompt not available');
+                alert('To install: Open Chrome menu (3 dots) > "Install app" or "Add to Home screen"');
+            }
+        }
+
+        function dismissInstallBanner() {
+            document.getElementById('installBanner').style.display = 'none';
+        }
+
+        // Log when app is installed
+        window.addEventListener('appinstalled', () => {
+            console.log('App was installed successfully');
+            document.getElementById('installBanner').style.display = 'none';
+        });
+
+        // Service worker registration for PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((registration) => {
+                        console.log('Service Worker registered successfully:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
+        }
+
+        let db = null;
+
+        // Request persistent storage to prevent data deletion
+        async function requestPersistentStorage() {
+            if (navigator.storage && navigator.storage.persist) {
+                const isPersisted = await navigator.storage.persist();
+                console.log(`Persistent storage granted: ${isPersisted}`);
+                
+                // Check current storage status
+                if (navigator.storage.persisted) {
+                    const persisted = await navigator.storage.persisted();
+                    console.log(`Storage is ${persisted ? 'persistent' : 'not persistent'}`);
+                }
+                
+                // Estimate storage usage
+                if (navigator.storage.estimate) {
+                    const estimate = await navigator.storage.estimate();
+                    const percentUsed = (estimate.usage / estimate.quota * 100).toFixed(2);
+                    console.log(`Storage: ${(estimate.usage / 1024 / 1024).toFixed(2)} MB used of ${(estimate.quota / 1024 / 1024).toFixed(2)} MB (${percentUsed}%)`);
+                }
+                
+                return isPersisted;
+            }
+            return false;
+        }
+
+        // Initialize IndexedDB
+        async function initDB() {
+            // Request persistent storage to protect against automatic deletion
+            await requestPersistentStorage();
+            
+            if (!window.indexedDB) {
+                alert("Your browser doesn't support a stable database environment.");
+                return;
+            }
+            
+            const request = indexedDB.open('HardwareDB', 1);
+            request.onupgradeneeded = (e) => {
+                const db = e.target.result;
+                db.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
+            };
+            request.onsuccess = (e) => {
+                db = e.target.result;
+                displayItems();
+            };
+            request.onerror = (e) => {
+                console.error('Database error:', e.target.error);
+                alert('Failed to open database. Your data may not be saved.');
+            };
+        }
+
+        function addItem() {
+            const name = document.getElementById('name').value;
+            const category = document.getElementById('category').value;
+            const quantity = parseInt(document.getElementById('quantity').value);
+            const row = document.getElementById('row').value;
+            const col = document.getElementById('col').value;
+            const size = document.getElementById('size').value;
+            const length = document.getElementById('length').value;
+            const material = document.getElementById('material').value;
+            const headType = document.getElementById('headType').value;
+
+            if (!category || !row || !col) {
+                alert("Please fill in all required fields (Category, Row, Column)!");
+                return;
+            }
+
+            const tx = db.transaction(['items'], 'readwrite');
+            const store = tx.objectStore('items');
+            store.add({ name, category, quantity, row, col, size, length, material, headType });
+
+            tx.oncomplete = () => {
+                alert('Item added successfully!');
+                clearForm();
+                displayItems();
+                toggleAddForm();
+            };
+        }
+
+        function displayItems() {
+            const tbody = document.getElementById('inventory-table');
+            tbody.innerHTML = '';
+
+            const filterCategory = document.getElementById('filterCategory').value.toLowerCase();
+            const filterSize = document.getElementById('filterSize').value.toLowerCase();
+
+            const tx = db.transaction(['items'], 'readonly');
+            const store = tx.objectStore('items');
+            const request = store.getAll();
+
+            request.onsuccess = (e) => {
+                const items = e.target.result;
+                items.forEach((item) => {
+                    // Apply filters
+                    if (filterCategory && item.category.toLowerCase() !== filterCategory) {
+                        return;
+                    }
+                    if (filterSize && (!item.size || !item.size.toLowerCase().includes(filterSize))) {
+                        return;
+                    }
+
+                    const tr = document.createElement('tr');
+                    tr.id = `row-${item.id}`;
+                    tr.innerHTML = `
+                        <td data-field="category">${item.category}</td>
+                        <td data-field="name">${item.name || '-'}</td>
+                        <td data-field="size">${item.size || '-'}</td>
+                        <td data-field="length">${item.length || '-'}</td>
+                        <td data-field="material">${item.material || '-'}</td>
+                        <td data-field="headType">${item.headType || '-'}</td>
+                        <td data-field="row">${item.row}</td>
+                        <td data-field="col">${item.col}</td>
+                        <td><input type="number" value="${item.quantity}" onchange="updateQty(${item.id}, this.value)" style="width:60px; padding:5px; text-align:center;"></td>
+                        <td>
+                            <button onclick="editItem(${item.id})" style="background-color:#28a745; padding:5px 10px; margin:2px;">Edit</button>
+                            <button onclick="decrementQty(${item.id}, 1)" style="background-color:#6c757d; padding:5px 10px; margin:2px;">-1</button>
+                            <button onclick="decrementQty(${item.id}, 2)" style="background-color:#6c757d; padding:5px 10px; margin:2px;">-2</button>
+                            <button onclick="decrementQty(${item.id}, 4)" style="background-color:#6c757d; padding:5px 10px; margin:2px;">-4</button>
+                            <button onclick="deleteItem(${item.id})" style="background-color:#dc3545; padding:5px 10px; margin:2px;">Remove</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            };
+        }
+
+        function deleteItem(id) {
+            const tx = db.transaction(['items'], 'readwrite');
+            const store = tx.objectStore('items');
+            store.delete(id);
+
+            tx.oncomplete = () => {
+                displayItems();
+            };
+        }
+
+        function decrementQty(id, amount) {
+            const tx = db.transaction(['items'], 'readwrite');
+            const store = tx.objectStore('items');
+            const request = store.get(id);
+
+            request.onsuccess = (e) => {
+                const item = e.target.result;
+                if (item) {
+                    item.quantity -= amount;
+                    if (item.quantity <= 0) {
+                        store.delete(id);
+                    } else {
+                        store.put(item);
+                    }
+                }
+            };
+
+            tx.oncomplete = () => {
+                displayItems();
+            };
+        }
+
+        function updateQty(id, newQty) {
+            const quantity = parseInt(newQty);
+            if (isNaN(quantity) || quantity < 0) {
+                displayItems();
+                return;
+            }
+
+            const tx = db.transaction(['items'], 'readwrite');
+            const store = tx.objectStore('items');
+            const request = store.get(id);
+
+            request.onsuccess = (e) => {
+                const item = e.target.result;
+                if (item) {
+                    if (quantity === 0) {
+                        store.delete(id);
+                    } else {
+                        item.quantity = quantity;
+                        store.put(item);
+                    }
+                }
+            };
+
+            tx.oncomplete = () => {
+                displayItems();
+            };
+        }
+
+        function editItem(id) {
+            const tx = db.transaction(['items'], 'readonly');
+            const store = tx.objectStore('items');
+            const request = store.get(id);
+
+            request.onsuccess = (e) => {
+                const item = e.target.result;
+                if (!item) return;
+
+                const row = document.getElementById(`row-${id}`);
+                const cells = row.querySelectorAll('td[data-field]');
+
+                const originalValues = {};
+                cells.forEach(cell => {
+                    const field = cell.getAttribute('data-field');
+                    originalValues[field] = item[field] || '';
+
+                    if (field === 'category') {
+                        cell.innerHTML = `<select id="edit-category-${id}" style="width:100%; padding:5px;">
+                            <option value="Screw" ${item.category === 'Screw' ? 'selected' : ''}>Screw</option>
+                            <option value="Nut" ${item.category === 'Nut' ? 'selected' : ''}>Nut</option>
+                            <option value="Washer" ${item.category === 'Washer' ? 'selected' : ''}>Washer</option>
+                            <option value="Other" ${item.category === 'Other' ? 'selected' : ''}>Other Hardware</option>
+                        </select>`;
+                    } else if (field === 'material') {
+                        cell.innerHTML = `<select id="edit-material-${id}" style="width:100%; padding:5px;">
+                            <option value="">Select material...</option>
+                            <option value="Machine" ${item.material === 'Machine' ? 'selected' : ''}>Machine</option>
+                            <option value="Wood" ${item.material === 'Wood' ? 'selected' : ''}>Wood</option>
+                            <option value="Metal" ${item.material === 'Metal' ? 'selected' : ''}>Metal</option>
+                            <option value="Plastic" ${item.material === 'Plastic' ? 'selected' : ''}>Plastic</option>
+                        </select>`;
+                    } else if (field === 'headType') {
+                        cell.innerHTML = `<select id="edit-headType-${id}" style="width:100%; padding:5px;">
+                            <option value="">Select head type...</option>
+                            <option value="Flat" ${item.headType === 'Flat' ? 'selected' : ''}>Flat</option>
+                            <option value="Phillips" ${item.headType === 'Phillips' ? 'selected' : ''}>Phillips</option>
+                            <option value="Hex" ${item.headType === 'Hex' ? 'selected' : ''}>Hex</option>
+                            <option value="Star" ${item.headType === 'Star' ? 'selected' : ''}>Star</option>
+                            <option value="Square" ${item.headType === 'Square' ? 'selected' : ''}>Square</option>
+                            <option value="Pan" ${item.headType === 'Pan' ? 'selected' : ''}>Pan</option>
+                            <option value="Button" ${item.headType === 'Button' ? 'selected' : ''}>Button</option>
+                            <option value="Socket" ${item.headType === 'Socket' ? 'selected' : ''}>Socket</option>
+                        </select>`;
+                    } else if (field === 'size') {
+                        cell.innerHTML = `<input type="text" id="edit-size-${id}" list="edit-size-list-${id}" value="${item.size || ''}" style="width:100%; padding:5px;">
+                        <datalist id="edit-size-list-${id}">
+                            <option value="M3">
+                            <option value="M4">
+                            <option value="M5">
+                            <option value="M6">
+                            <option value="M8">
+                            <option value="M10">
+                            <option value="M12">
+                        </datalist>`;
+                    } else if (field === 'length') {
+                        cell.innerHTML = `<input type="text" id="edit-length-${id}" list="edit-length-list-${id}" value="${item.length || ''}" style="width:100%; padding:5px;">
+                        <datalist id="edit-length-list-${id}">
+                            <option value="10mm">
+                            <option value="12mm">
+                            <option value="16mm">
+                            <option value="20mm">
+                            <option value="25mm">
+                            <option value="30mm">
+                            <option value="40mm">
+                            <option value="50mm">
+                        </datalist>`;
+                    } else {
+                        cell.innerHTML = `<input type="text" id="edit-${field}-${id}" value="${item[field] || ''}" style="width:100%; padding:5px;">`;
+                    }
+                });
+
+                const actionsCell = row.cells[row.cells.length - 1];
+                actionsCell.innerHTML = `
+                    <button onclick="saveEdit(${item.id})" style="background-color:#007bff; padding:5px 10px; margin:2px;">Save</button>
+                    <button onclick="cancelEdit(${item.id})" style="background-color:#6c757d; padding:5px 10px; margin:2px;">Cancel</button>
+                `;
+
+                row.dataset.editing = 'true';
+            };
+        }
+
+        function saveEdit(id) {
+            const category = document.getElementById(`edit-category-${id}`).value;
+            const row = document.getElementById(`edit-row-${id}`).value;
+            const col = document.getElementById(`edit-col-${id}`).value;
+
+            if (!category || !row || !col) {
+                alert('Category, Row, and Column are required!');
+                return;
+            }
+
+            const tx = db.transaction(['items'], 'readwrite');
+            const store = tx.objectStore('items');
+            const request = store.get(id);
+
+            request.onsuccess = (e) => {
+                const item = e.target.result;
+                if (item) {
+                    item.category = category;
+                    item.name = document.getElementById(`edit-name-${id}`).value;
+                    item.size = document.getElementById(`edit-size-${id}`).value;
+                    item.length = document.getElementById(`edit-length-${id}`).value;
+                    item.material = document.getElementById(`edit-material-${id}`).value;
+                    item.headType = document.getElementById(`edit-headType-${id}`).value;
+                    item.row = row;
+                    item.col = col;
+                    store.put(item);
+                }
+            };
+
+            tx.oncomplete = () => {
+                displayItems();
+            };
+        }
+
+        function cancelEdit(id) {
+            displayItems();
+        }
+
+        function clearForm() {
+            document.getElementById('name').value = '';
+            document.getElementById('quantity').value = 1;
+            document.getElementById('row').value = '';
+            document.getElementById('col').value = '';
+            document.getElementById('size').value = '';
+            document.getElementById('length').value = '';
+            document.getElementById('material').value = '';
+            document.getElementById('headType').value = '';
+        }
+
+        function toggleAddForm() {
+            const card = document.getElementById('addItemCard');
+            card.classList.toggle('hidden');
+        }
+
+        function clearFilters() {
+            document.getElementById('filterCategory').value = '';
+            document.getElementById('filterSize').value = '';
+            displayItems();
+        }
+
+        function exportData() {
+            const tx = db.transaction(['items'], 'readonly');
+            const store = tx.objectStore('items');
+            const request = store.getAll();
+
+            request.onsuccess = (e) => {
+                const items = e.target.result;
+                const dataStr = JSON.stringify(items, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `hardware-inventory-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+        }
+
+        function importData() {
+            document.getElementById('fileInput').click();
+        }
+
+        function handleFileImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const items = JSON.parse(e.target.result);
+                    if (!Array.isArray(items)) {
+                        alert('Invalid JSON format. Expected an array of items.');
+                        return;
+                    }
+
+                    const tx = db.transaction(['items'], 'readwrite');
+                    const store = tx.objectStore('items');
+
+                    items.forEach(item => {
+                        // Remove id if present to let autoIncrement assign new ones
+                        const { id, ...itemData } = item;
+                        store.add(itemData);
+                    });
+
+                    tx.oncomplete = () => {
+                        alert(`Successfully imported ${items.length} items!`);
+                        displayItems();
+                        event.target.value = ''; // Reset file input
+                    };
+
+                    tx.onerror = () => {
+                        alert('Error importing data. Please check the file format.');
+                    };
+                } catch (error) {
+                    alert('Error parsing JSON file: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Run Initialization on Load
+        window.onload = initDB;
+    </script>
+</body>
+</html>
