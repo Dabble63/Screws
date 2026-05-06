@@ -778,14 +778,13 @@
         }
 
         function exportData() {
-            const tx = db.transaction(['items'], 'readonly');
-            const store = tx.objectStore('items');
-            const request = store.getAll();
+            const tx = db.transaction(['items', 'photos'], 'readonly');
+            const itemsReq = tx.objectStore('items').getAll();
+            const photosReq = tx.objectStore('photos').getAll();
 
-            request.onsuccess = (e) => {
-                const items = e.target.result;
-                const dataStr = JSON.stringify(items, null, 2);
-                const blob = new Blob([dataStr], { type: 'application/json' });
+            tx.oncomplete = () => {
+                const payload = { items: itemsReq.result, photos: photosReq.result };
+                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -806,29 +805,56 @@
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
-                    const items = JSON.parse(e.target.result);
+                    const parsed = JSON.parse(e.target.result);
+
+                    // Support both new format { items, photos } and legacy array format
+                    const items = Array.isArray(parsed) ? parsed : parsed.items;
+                    const photos = Array.isArray(parsed) ? [] : (parsed.photos || []);
+
                     if (!Array.isArray(items)) {
-                        alert('Invalid JSON format. Expected an array of items.');
+                        alert('Invalid JSON format.');
+                        event.target.value = '';
                         return;
                     }
 
-                    const tx = db.transaction(['items'], 'readwrite');
-                    const store = tx.objectStore('items');
+                    if (!confirm(`Warning: this will permanently overwrite the current database with ${items.length} item(s) and ${photos.length} photo(s) from the file. This cannot be undone.\n\nContinue?`)) {
+                        event.target.value = '';
+                        return;
+                    }
 
-                    items.forEach(item => {
-                        // Remove id if present to let autoIncrement assign new ones
-                        const { id, ...itemData } = item;
-                        store.add(itemData);
-                    });
+                    // Clear both stores first, then import
+                    const clearTx = db.transaction(['items', 'photos'], 'readwrite');
+                    clearTx.objectStore('items').clear();
+                    clearTx.objectStore('photos').clear();
 
-                    tx.oncomplete = () => {
-                        alert(`Successfully imported ${items.length} items!`);
-                        displayItems();
-                        event.target.value = ''; // Reset file input
+                    clearTx.oncomplete = () => {
+                        const tx = db.transaction(['items', 'photos'], 'readwrite');
+                        const itemStore = tx.objectStore('items');
+                        const photoStore = tx.objectStore('photos');
+
+                        items.forEach(item => {
+                            const { id, ...itemData } = item;
+                            itemStore.add(itemData);
+                        });
+
+                        photos.forEach(photo => {
+                            const { id, ...photoData } = photo;
+                            photoStore.add(photoData);
+                        });
+
+                        tx.oncomplete = () => {
+                            alert(`Successfully imported ${items.length} item(s) and ${photos.length} photo(s)!`);
+                            displayItems();
+                            event.target.value = '';
+                        };
+
+                        tx.onerror = () => {
+                            alert('Error importing data. Please check the file format.');
+                        };
                     };
 
-                    tx.onerror = () => {
-                        alert('Error importing data. Please check the file format.');
+                    clearTx.onerror = () => {
+                        alert('Error clearing existing data before import.');
                     };
                 } catch (error) {
                     alert('Error parsing JSON file: ' + error.message);
