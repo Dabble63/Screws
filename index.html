@@ -44,8 +44,38 @@
         /* Table scroll on mobile */
         .table-wrapper { overflow-x: auto; }
         .filter-container { display: flex; gap: 10px; margin-bottom: 15px; }
-        .install-banner { background-color: #28a745; color: white; padding: 10px; text-align: center; display: none; }
-        .install-banner button { background-color: white; color: #28a745; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .install-banner { 
+            background-color: #28a745; 
+            color: white; 
+            padding: 15px; 
+            text-align: center; 
+            display: none;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .install-banner button { 
+            background-color: white; 
+            color: #28a745; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 4px; 
+            cursor: pointer; 
+            font-weight: bold;
+            margin: 0 5px;
+        }
+        .install-banner button:hover { background-color: #f0f0f0; }
+
+        /* Photo modal */
+        .photo-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:2000; overflow-y:auto; }
+        .photo-modal-inner { background:white; margin:20px auto; padding:20px; max-width:600px; border-radius:8px; position:relative; }
+        .photo-thumb { width:120px; height:120px; object-fit:cover; border-radius:4px; cursor:pointer; border:2px solid #ddd; }
+        .photo-thumb:hover { border-color:#007bff; }
+        .photo-item { position:relative; display:inline-block; }
+        .photo-delete-btn { position:absolute; top:2px; right:2px; background:rgba(220,53,69,0.9); color:white; border:none; border-radius:50%; width:22px; height:22px; font-size:12px; cursor:pointer; padding:0; line-height:22px; text-align:center; width:auto; }
+        .photo-count-badge { background:#17a2b8; color:white; border-radius:10px; padding:1px 6px; font-size:11px; vertical-align:middle; margin-left:2px; }
+        #photoLightbox { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:3000; cursor:pointer; align-items:center; justify-content:center; }
     </style>
 </head>
 <body>
@@ -198,17 +228,36 @@
         </div>
     </div>
 
+    <!-- Photo modal -->
+    <div class="photo-modal" id="photoModal" onclick="if(event.target===this) closePhotoModal()">
+        <div class="photo-modal-inner">
+            <button onclick="closePhotoModal()" style="position:absolute; top:10px; right:10px; background:#dc3545; color:white; border:none; padding:6px 12px; cursor:pointer; border-radius:4px; font-weight:bold; width:auto;">✕</button>
+            <h3 id="photoModalTitle">Photos</h3>
+            <div id="photoGallery" style="display:flex; flex-wrap:wrap; gap:10px; margin:15px 0; min-height:60px;"></div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;">
+                <button onclick="triggerCameraCapture()" style="background:#28a745; flex:1;">📷 Take Photo</button>
+                <button onclick="triggerFileUpload()" style="background:#007bff; flex:1;">📁 Upload Photo</button>
+            </div>
+            <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoCapture(event)">
+            <input type="file" id="fileUploadInput" accept="image/*" style="display:none;" onchange="handlePhotoCapture(event)">
+        </div>
+    </div>
+
+    <!-- Full-size photo lightbox -->
+    <div id="photoLightbox" onclick="this.style.display='none'">
+        <img id="lightboxImg" src="" style="max-width:95vw; max-height:95vh; object-fit:contain;">
+    </div>
+
     <script>
         let deferredPrompt;
 
         // Capture the install prompt event
         window.addEventListener('beforeinstallprompt', (e) => {
             console.log('beforeinstallprompt event fired');
-            // Prevent the mini-infobar from appearing
-            e.preventDefault();
-            // Store the event for later use
+            // Don't prevent default - let Chrome show its native prompt
+            // Store the event for manual trigger if needed
             deferredPrompt = e;
-            // Show the install banner
+            // Show the install banner as additional option
             document.getElementById('installBanner').style.display = 'block';
         });
 
@@ -292,10 +341,16 @@
                 return;
             }
             
-            const request = indexedDB.open('HardwareDB', 1);
+            const request = indexedDB.open('HardwareDB', 2);
             request.onupgradeneeded = (e) => {
                 const db = e.target.result;
-                db.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
+                if (!db.objectStoreNames.contains('items')) {
+                    db.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
+                }
+                if (!db.objectStoreNames.contains('photos')) {
+                    const photoStore = db.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
+                    photoStore.createIndex('by_location', ['row', 'col'], { unique: false });
+                }
             };
             request.onsuccess = (e) => {
                 db = e.target.result;
@@ -348,6 +403,7 @@
 
             request.onsuccess = (e) => {
                 const items = e.target.result;
+                const rendered = [];
                 items.forEach((item) => {
                     // Apply filters
                     if (filterCategory && item.category.toLowerCase() !== filterCategory) {
@@ -357,6 +413,7 @@
                         return;
                     }
 
+                    rendered.push(item);
                     const tr = document.createElement('tr');
                     tr.id = `row-${item.id}`;
                     tr.innerHTML = `
@@ -370,6 +427,7 @@
                         <td data-field="col">${item.col}</td>
                         <td><input type="number" value="${item.quantity}" onchange="updateQty(${item.id}, this.value)" style="width:60px; padding:5px; text-align:center;"></td>
                         <td>
+                            <button onclick="openPhotos('${item.row}', '${item.col}')" style="background-color:#17a2b8; padding:5px 10px; margin:2px;">📷<span class="photo-count-badge" id="photo-badge-${item.id}" style="display:none;"></span></button>
                             <button onclick="editItem(${item.id})" style="background-color:#28a745; padding:5px 10px; margin:2px;">Edit</button>
                             <button onclick="decrementQty(${item.id}, 1)" style="background-color:#6c757d; padding:5px 10px; margin:2px;">-1</button>
                             <button onclick="decrementQty(${item.id}, 2)" style="background-color:#6c757d; padding:5px 10px; margin:2px;">-2</button>
@@ -379,6 +437,9 @@
                     `;
                     tbody.appendChild(tr);
                 });
+
+                // Update photo count badges asynchronously
+                rendered.forEach(item => updatePhotoCountBadge(item.id, item.row, item.col));
             };
         }
 
@@ -560,6 +621,138 @@
 
         function cancelEdit(id) {
             displayItems();
+        }
+
+        // ── Photo management ────────────────────────────────────────────────
+
+        let currentPhotoRow = null;
+        let currentPhotoCol = null;
+
+        function openPhotos(row, col) {
+            currentPhotoRow = String(row);
+            currentPhotoCol = String(col);
+            document.getElementById('photoModalTitle').textContent = `Photos — Row ${row}, Col ${col}`;
+            document.getElementById('photoModal').style.display = 'block';
+            loadPhotoGallery(currentPhotoRow, currentPhotoCol);
+        }
+
+        function closePhotoModal() {
+            document.getElementById('photoModal').style.display = 'none';
+            currentPhotoRow = null;
+            currentPhotoCol = null;
+        }
+
+        function triggerCameraCapture() {
+            document.getElementById('cameraInput').click();
+        }
+
+        function triggerFileUpload() {
+            document.getElementById('fileUploadInput').click();
+        }
+
+        function handlePhotoCapture(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            event.target.value = '';
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const MAX = 1024;
+                    let w = img.width, h = img.height;
+                    if (w > MAX || h > MAX) {
+                        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                        else { w = Math.round(w * MAX / h); h = MAX; }
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                    savePhoto(currentPhotoRow, currentPhotoCol, dataUrl);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function savePhoto(row, col, dataUrl) {
+            const tx = db.transaction(['photos'], 'readwrite');
+            const store = tx.objectStore('photos');
+            store.add({ row: String(row), col: String(col), dataUrl, timestamp: Date.now() });
+            tx.oncomplete = () => {
+                loadPhotoGallery(row, col);
+                displayItems();
+            };
+        }
+
+        function loadPhotoGallery(row, col) {
+            const gallery = document.getElementById('photoGallery');
+            gallery.innerHTML = '<em style="color:#999;">Loading…</em>';
+
+            const tx = db.transaction(['photos'], 'readonly');
+            const store = tx.objectStore('photos');
+            const index = store.index('by_location');
+            const request = index.getAll(IDBKeyRange.only([String(row), String(col)]));
+
+            request.onsuccess = (e) => {
+                const photos = e.target.result;
+                gallery.innerHTML = '';
+                if (photos.length === 0) {
+                    gallery.innerHTML = '<em style="color:#999;">No photos yet.</em>';
+                    return;
+                }
+                photos.forEach(photo => {
+                    const div = document.createElement('div');
+                    div.className = 'photo-item';
+                    const img = document.createElement('img');
+                    img.src = photo.dataUrl;
+                    img.className = 'photo-thumb';
+                    img.title = 'Tap to enlarge';
+                    img.onclick = () => viewFullPhoto(photo.dataUrl);
+                    const btn = document.createElement('button');
+                    btn.className = 'photo-delete-btn';
+                    btn.textContent = '✕';
+                    btn.title = 'Delete photo';
+                    btn.onclick = () => deletePhoto(photo.id);
+                    div.appendChild(img);
+                    div.appendChild(btn);
+                    gallery.appendChild(div);
+                });
+            };
+        }
+
+        function viewFullPhoto(dataUrl) {
+            document.getElementById('lightboxImg').src = dataUrl;
+            const lb = document.getElementById('photoLightbox');
+            lb.style.display = 'flex';
+        }
+
+        function deletePhoto(photoId) {
+            if (!confirm('Delete this photo?')) return;
+            const tx = db.transaction(['photos'], 'readwrite');
+            const store = tx.objectStore('photos');
+            store.delete(photoId);
+            tx.oncomplete = () => {
+                loadPhotoGallery(currentPhotoRow, currentPhotoCol);
+                displayItems();
+            };
+        }
+
+        function updatePhotoCountBadge(itemId, row, col) {
+            const tx = db.transaction(['photos'], 'readonly');
+            const store = tx.objectStore('photos');
+            const index = store.index('by_location');
+            const request = index.count(IDBKeyRange.only([String(row), String(col)]));
+            request.onsuccess = (e) => {
+                const count = e.target.result;
+                const badge = document.getElementById(`photo-badge-${itemId}`);
+                if (badge) {
+                    badge.textContent = count;
+                    badge.style.display = count > 0 ? 'inline' : 'none';
+                }
+            };
         }
 
         function clearForm() {
