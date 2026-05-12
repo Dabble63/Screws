@@ -206,6 +206,10 @@
             <input type="text" id="name" placeholder="e.g., M4 Screws, Washers">
         </div>
         <div class="form-group">
+            <label for="box">Box:</label>
+            <input type="text" id="box" placeholder="e.g., Wall 10 x 6">
+        </div>
+        <div class="form-group">
             <label for="row">Container Row:</label>
             <input type="number" id="row" placeholder="e.g., 5">
         </div>
@@ -310,6 +314,7 @@
                         <th>Length</th>
                         <th>Material</th>
                         <th>Head Type</th>
+                        <th>Box</th>
                         <th>Row</th>
                         <th>Col</th>
                         <th>Qty</th>
@@ -466,6 +471,7 @@
             const length = document.getElementById('length').value;
             const material = document.getElementById('material').value;
             const headType = document.getElementById('headType').value;
+            const box = document.getElementById('box').value;
 
             if (!category || !row || !col) {
                 alert("Please fill in all required fields (Category, Row, Column)!");
@@ -474,7 +480,7 @@
 
             const tx = db.transaction(['items'], 'readwrite');
             const store = tx.objectStore('items');
-            store.add({ name, category, quantity, row, col, size, length, material, headType });
+            store.add({ name, category, quantity, row, col, size, length, material, headType, box });
 
             tx.oncomplete = () => {
                 alert('Item added successfully!');
@@ -545,6 +551,7 @@
                         <td data-field="headType">${item.headType || '-'}</td>
                         <td data-field="row">${item.row}</td>
                         <td data-field="col">${item.col}</td>
+                        <td data-field="box">${item.box || '-'}</td>
                         <td><input type="number" value="${item.quantity}" onchange="updateQty(${item.id}, this.value)" style="width:60px; padding:5px; text-align:center;"></td>
                         <td>
                             <button onclick="openPhotos('${item.row}', '${item.col}')" style="background-color:#17a2b8; padding:5px 10px; margin:2px;">📷<span class="photo-count-badge" id="photo-badge-${item.id}" style="display:none;"></span></button>
@@ -730,6 +737,7 @@
                     item.headType = document.getElementById(`edit-headType-${id}`).value;
                     item.row = row;
                     item.col = col;
+                    item.box = document.getElementById(`edit-box-${id}`).value;
                     store.put(item);
                 }
             };
@@ -908,6 +916,7 @@
             document.getElementById('quantity').value = 1;
             document.getElementById('row').value = '';
             document.getElementById('col').value = '';
+            document.getElementById('box').value = '';
             document.getElementById('size').value = '';
             document.getElementById('length').value = '';
             document.getElementById('material').value = '';
@@ -1006,6 +1015,7 @@
 
                         items.forEach(item => {
                             const { id, ...itemData } = item;
+                            if (!itemData.box) itemData.box = 'Wall 10 x 6';
                             itemStore.add(itemData);
                         });
 
