@@ -549,9 +549,9 @@
                         <td data-field="length">${item.length || '-'}</td>
                         <td data-field="material">${item.material || '-'}</td>
                         <td data-field="headType">${item.headType || '-'}</td>
+                        <td data-field="box">${item.box || '-'}</td>
                         <td data-field="row">${item.row}</td>
                         <td data-field="col">${item.col}</td>
-                        <td data-field="box">${item.box || '-'}</td>
                         <td><input type="number" value="${item.quantity}" onchange="updateQty(${item.id}, this.value)" style="width:60px; padding:5px; text-align:center;"></td>
                         <td>
                             <button onclick="openPhotos('${item.row}', '${item.col}')" style="background-color:#17a2b8; padding:5px 10px; margin:2px;">📷<span class="photo-count-badge" id="photo-badge-${item.id}" style="display:none;"></span></button>
