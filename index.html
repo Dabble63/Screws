@@ -43,7 +43,56 @@
         
         /* Table scroll on mobile */
         .table-wrapper { overflow-x: auto; }
-        .filter-container { display: flex; gap: 10px; margin-bottom: 15px; }
+
+        /* Floating action button */
+        .fab {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background-color: #28a745;
+            color: white;
+            font-size: 32px;
+            line-height: 56px;
+            text-align: center;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 999;
+            padding: 0;
+            width: 56px;
+        }
+        .fab:hover { background-color: #218838; }
+
+        /* Add item dialog */
+        #addItemDialog {
+            border: none;
+            border-radius: 8px;
+            padding: 0;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+            max-width: 480px;
+            width: 90vw;
+        }
+        #addItemDialog::backdrop { background: rgba(0,0,0,0.5); }
+        .dialog-inner { padding: 20px; }
+        .dialog-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .dialog-header h3 { margin: 0; }
+        .dialog-close-btn { background: #dc3545; color: white; border: none; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-weight: bold; font-size: 14px; width: auto; }
+        .filter-container { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+
+        /* Filter dialog */
+        #filterDialog {
+            border: none;
+            border-radius: 8px;
+            padding: 0;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+            max-width: 420px;
+            width: 90vw;
+        }
+        #filterDialog::backdrop { background: rgba(0,0,0,0.5); }
+        .filter-active-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#ffc107; margin-left:6px; vertical-align:middle; }
         .install-banner { 
             background-color: #28a745; 
             color: white; 
@@ -87,17 +136,20 @@
     <h1>Hardware Container Inventory 1.0</h1>
 
     <div class="toolbar">
-        <button onclick="toggleAddForm()" style="background-color:#28a745;">+ Add Item</button>
         <button onclick="exportData()" style="background-color:#17a2b8;">Export JSON</button>
         <button onclick="importData()" style="background-color:#ffc107; color:#000;">Import JSON</button>
     </div>
     <input type="file" id="fileInput" accept=".json" style="display:none;" onchange="handleFileImport(event)">
 
-    <div class="card hidden" id="addItemCard">
-        <h3>Add Item to Container</h3>
+    <dialog id="addItemDialog">
+      <div class="dialog-inner">
+        <div class="dialog-header">
+            <h3>Add Item to Container</h3>
+            <button class="dialog-close-btn" onclick="toggleAddForm()">✕</button>
+        </div>
         <div class="form-group">
             <label for="category">Category:</label>
-            <select id="category">
+            <select id="category" onchange="updateFormFields()">
                 <option value="Screw">Screw</option>
                 <option value="Nut">Nut</option>
                 <option value="Washer">Washer</option>
@@ -105,19 +157,21 @@
             </select>
         </div>
         <div class="form-group">
-            <label for="size">Size:</label>
-            <input type="text" id="size" list="size-list" placeholder="Select or enter custom size">
-            <datalist id="size-list">
-                <option value="M3">
-                <option value="M4">
-                <option value="M5">
-                <option value="M6">
-                <option value="M8">
-                <option value="M10">
-                <option value="M12">
-            </datalist>
+            <label for="material">Material:</label>
+            <select id="material" onchange="updateFormFields()">
+                <option value="">Select material...</option>
+                <option value="Machine">Machine</option>
+                <option value="Wood">Wood</option>
+                <option value="Metal">Metal</option>
+                <option value="Plastic">Plastic</option>
+            </select>
         </div>
         <div class="form-group">
+            <label for="size">Size:</label>
+            <input type="text" id="size" list="size-list" placeholder="Select or enter custom size">
+            <datalist id="size-list"></datalist>
+        </div>
+        <div class="form-group" id="lengthGroup">
             <label for="length">Length:</label>
             <input type="text" id="length" list="length-list" placeholder="Select or enter custom length">
             <datalist id="length-list">
@@ -132,16 +186,6 @@
                 <option value="40mm">
                 <option value="50mm">
             </datalist>
-        </div>
-        <div class="form-group">
-            <label for="material">Material:</label>
-            <select id="material">
-                <option value="">Select material...</option>
-                <option value="Machine">Machine</option>
-                <option value="Wood">Wood</option>
-                <option value="Metal">Metal</option>
-                <option value="Plastic">Plastic</option>
-            </select>
         </div>
         <div class="form-group">
             <label for="headType">Head Type:</label>
@@ -174,37 +218,87 @@
             <input type="number" id="quantity" value="1">
         </div>
         <button onclick="addItem()">Add to Database</button>
-    </div>
+      </div>
+    </dialog>
+
+    <button class="fab" onclick="toggleAddForm()" title="Add Item">+</button>
+
+    <dialog id="filterDialog">
+      <div class="dialog-inner">
+        <div class="dialog-header">
+            <h3 style="margin:0;">Filter &amp; Sort</h3>
+            <button class="dialog-close-btn" onclick="toggleFilterDialog()">✕</button>
+        </div>
+        <div class="form-group">
+            <label for="filterCategory" style="margin-bottom: 5px;">Filter by Category:</label>
+            <select id="filterCategory" onchange="displayItems(); updateFilterDot();">
+                <option value="">All Categories</option>
+                <option value="Screw">Screw</option>
+                <option value="Nut">Nut</option>
+                <option value="Washer">Washer</option>
+                <option value="Other">Other Hardware</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="filterSize" style="margin-bottom: 5px;">Filter by Size:</label>
+            <input type="text" id="filterSize" list="filter-size-list" oninput="displayItems(); updateFilterDot();" placeholder="e.g., M4">
+            <datalist id="filter-size-list">
+                <option value="M3">
+                <option value="M4">
+                <option value="M5">
+                <option value="M6">
+                <option value="M8">
+                <option value="M10">
+                <option value="M12">
+                <option value="4G">
+                <option value="6G">
+                <option value="8G">
+                <option value="10G">
+                <option value="12G">
+                <option value="14G">
+                <option value="16G">
+                <option value="18G">
+                <option value="20G">
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label for="filterLength" style="margin-bottom: 5px;">Filter by Length:</label>
+            <input type="text" id="filterLength" list="filter-length-list" oninput="displayItems(); updateFilterDot();" placeholder="e.g., 20mm">
+            <datalist id="filter-length-list">
+                <option value="6mm">
+                <option value="8mm">
+                <option value="10mm">
+                <option value="12mm">
+                <option value="16mm">
+                <option value="20mm">
+                <option value="25mm">
+                <option value="30mm">
+                <option value="40mm">
+                <option value="50mm">
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label for="filterDesc" style="margin-bottom: 5px;">Filter by Description:</label>
+            <input type="text" id="filterDesc" oninput="displayItems(); updateFilterDot();" placeholder="e.g., M4 Screws">
+        </div>
+        <div class="form-group">
+            <label for="sortOrder" style="margin-bottom: 5px;">Sort by:</label>
+            <select id="sortOrder" onchange="displayItems();">
+                <option value="rowcol">Row / Column</option>
+                <option value="catsize">Category / Size / Length</option>
+            </select>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:10px;">
+            <button onclick="clearFilters()" style="background-color:#6c757d; flex:1;">Clear Filters</button>
+            <button onclick="toggleFilterDialog()" style="background-color:#007bff; flex:1;">Done</button>
+        </div>
+      </div>
+    </dialog>
 
     <div class="card">
         <h3>Current Inventory</h3>
-        <div class="filter-container">
-            <div>
-                <label for="filterCategory" style="margin-bottom: 5px;">Filter by Category:</label>
-                <select id="filterCategory" onchange="displayItems()">
-                    <option value="">All Categories</option>
-                    <option value="Screw">Screw</option>
-                    <option value="Nut">Nut</option>
-                    <option value="Washer">Washer</option>
-                    <option value="Other">Other Hardware</option>
-                </select>
-            </div>
-            <div>
-                <label for="filterSize" style="margin-bottom: 5px;">Filter by Size:</label>
-                <input type="text" id="filterSize" list="filter-size-list" onkeyup="displayItems()" placeholder="e.g., M4">
-                <datalist id="filter-size-list">
-                    <option value="M3">
-                    <option value="M4">
-                    <option value="M5">
-                    <option value="M6">
-                    <option value="M8">
-                    <option value="M10">
-                    <option value="M12">
-                </datalist>
-            </div>
-            <div style="align-self: flex-end;">
-                <button onclick="clearFilters()" style="background-color: #6c757d;">Clear Filters</button>
-            </div>
+        <div style="margin-bottom:15px; display:flex; align-items:center; gap:10px;">
+            <button onclick="toggleFilterDialog()" style="background:#007bff; width:auto; padding:8px 18px;">&#9881; Filter / Sort<span id="filterActiveDot" class="filter-active-dot" style="display:none;"></span></button>
         </div>
         <div class="table-wrapper">
             <table>
@@ -396,23 +490,49 @@
 
             const filterCategory = document.getElementById('filterCategory').value.toLowerCase();
             const filterSize = document.getElementById('filterSize').value.toLowerCase();
+            const filterLength = document.getElementById('filterLength').value.toLowerCase();
+            const filterDesc = document.getElementById('filterDesc').value.toLowerCase();
 
             const tx = db.transaction(['items'], 'readonly');
             const store = tx.objectStore('items');
             const request = store.getAll();
 
+            const sortOrder = document.getElementById('sortOrder').value;
+
             request.onsuccess = (e) => {
-                const items = e.target.result;
+                let items = e.target.result;
+
+                // Apply filters
+                items = items.filter(item => {
+                    if (filterCategory && item.category.toLowerCase() !== filterCategory) return false;
+                    if (filterSize && (!item.size || !item.size.toLowerCase().includes(filterSize))) return false;
+                    if (filterLength && (!item.length || !item.length.toLowerCase().includes(filterLength))) return false;
+                    if (filterDesc && (!item.name || !item.name.toLowerCase().includes(filterDesc))) return false;
+                    return true;
+                });
+
+                // Sort
+                const parseNum = s => { const n = parseFloat(s); return isNaN(n) ? s : n; };
+                if (sortOrder === 'rowcol') {
+                    items.sort((a, b) => {
+                        const rA = parseFloat(a.row) || 0, rB = parseFloat(b.row) || 0;
+                        if (rA !== rB) return rA - rB;
+                        return String(a.col).localeCompare(String(b.col));
+                    });
+                } else {
+                    items.sort((a, b) => {
+                        const cmp = String(a.category).localeCompare(String(b.category));
+                        if (cmp !== 0) return cmp;
+                        const sA = parseNum(a.size), sB = parseNum(b.size);
+                        if (sA !== sB) return sA < sB ? -1 : 1;
+                        const lA = parseNum(a.length), lB = parseNum(b.length);
+                        if (lA !== lB) return lA < lB ? -1 : 1;
+                        return 0;
+                    });
+                }
+
                 const rendered = [];
                 items.forEach((item) => {
-                    // Apply filters
-                    if (filterCategory && item.category.toLowerCase() !== filterCategory) {
-                        return;
-                    }
-                    if (filterSize && (!item.size || !item.size.toLowerCase().includes(filterSize))) {
-                        return;
-                    }
-
                     rendered.push(item);
                     const tr = document.createElement('tr');
                     tr.id = `row-${item.id}`;
@@ -755,6 +875,34 @@
             };
         }
 
+        function updateFormFields() {
+            const category = document.getElementById('category').value;
+            const material = document.getElementById('material').value;
+
+            // Show/hide length based on category
+            const lengthGroup = document.getElementById('lengthGroup');
+            if (category === 'Nut' || category === 'Washer') {
+                lengthGroup.style.display = 'none';
+                document.getElementById('length').value = '';
+            } else {
+                lengthGroup.style.display = '';
+            }
+
+            // Update size datalist based on material
+            const mxSizes = ['M3','M4','M5','M6','M8','M10','M12'];
+            const gSizes  = ['4G','6G','8G','10G','12G','14G','16G','18G','20G'];
+            let options;
+            if (material === 'Machine') {
+                options = mxSizes;
+            } else if (material === 'Wood') {
+                options = gSizes;
+            } else {
+                options = [...mxSizes, ...gSizes];
+            }
+            const dl = document.getElementById('size-list');
+            dl.innerHTML = options.map(v => `<option value="${v}">`).join('');
+        }
+
         function clearForm() {
             document.getElementById('name').value = '';
             document.getElementById('quantity').value = 1;
@@ -764,16 +912,40 @@
             document.getElementById('length').value = '';
             document.getElementById('material').value = '';
             document.getElementById('headType').value = '';
+            updateFormFields();
         }
 
         function toggleAddForm() {
-            const card = document.getElementById('addItemCard');
-            card.classList.toggle('hidden');
+            const dialog = document.getElementById('addItemDialog');
+            if (dialog.open) {
+                dialog.close();
+            } else {
+                dialog.showModal();
+                updateFormFields();
+            }
+        }
+
+        function toggleFilterDialog() {
+            const dialog = document.getElementById('filterDialog');
+            if (dialog.open) { dialog.close(); } else { dialog.showModal(); }
+        }
+
+        function updateFilterDot() {
+            const active =
+                document.getElementById('filterCategory').value !== '' ||
+                document.getElementById('filterSize').value !== '' ||
+                document.getElementById('filterLength').value !== '' ||
+                document.getElementById('filterDesc').value !== '';
+            document.getElementById('filterActiveDot').style.display = active ? 'inline-block' : 'none';
         }
 
         function clearFilters() {
             document.getElementById('filterCategory').value = '';
             document.getElementById('filterSize').value = '';
+            document.getElementById('filterLength').value = '';
+            document.getElementById('filterDesc').value = '';
+            document.getElementById('sortOrder').value = 'rowcol';
+            updateFilterDot();
             displayItems();
         }
 
