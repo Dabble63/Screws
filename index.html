@@ -440,15 +440,34 @@
                 return;
             }
             
-            const request = indexedDB.open('HardwareDB', 2);
+            const request = indexedDB.open('HardwareDB', 3);
             request.onupgradeneeded = (e) => {
                 const db = e.target.result;
+                const oldVersion = e.oldVersion;
                 if (!db.objectStoreNames.contains('items')) {
                     db.createObjectStore('items', { keyPath: 'id', autoIncrement: true });
                 }
                 if (!db.objectStoreNames.contains('photos')) {
                     const photoStore = db.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
-                    photoStore.createIndex('by_location', ['row', 'col'], { unique: false });
+                    photoStore.createIndex('by_location', ['box', 'row', 'col'], { unique: false });
+                } else if (oldVersion < 3) {
+                    // Migrate: replace ['row','col'] index with ['box','row','col']
+                    const photoStore = e.target.transaction.objectStore('photos');
+                    if (photoStore.indexNames.contains('by_location')) {
+                        photoStore.deleteIndex('by_location');
+                    }
+                    photoStore.createIndex('by_location', ['box', 'row', 'col'], { unique: false });
+                    // Set default box on existing photo records
+                    photoStore.openCursor().onsuccess = (ce) => {
+                        const cursor = ce.target.result;
+                        if (cursor) {
+                            if (!cursor.value.box) {
+                                const updated = Object.assign({}, cursor.value, { box: 'Wall 10 x 6' });
+                                cursor.update(updated);
+                            }
+                            cursor.continue();
+                        }
+                    };
                 }
             };
             request.onsuccess = (e) => {
@@ -554,7 +573,7 @@
                         <td data-field="col">${item.col}</td>
                         <td><input type="number" value="${item.quantity}" onchange="updateQty(${item.id}, this.value)" style="width:60px; padding:5px; text-align:center;"></td>
                         <td>
-                            <button onclick="openPhotos('${item.row}', '${item.col}')" style="background-color:#17a2b8; padding:5px 10px; margin:2px;">📷<span class="photo-count-badge" id="photo-badge-${item.id}" style="display:none;"></span></button>
+                            <button onclick="openPhotos('${item.box || 'Wall 10 x 6'}', '${item.row}', '${item.col}')" style="background-color:#17a2b8; padding:5px 10px; margin:2px;">📷<span class="photo-count-badge" id="photo-badge-${item.id}" style="display:none;"></span></button>
                             <button onclick="editItem(${item.id})" style="background-color:#28a745; padding:5px 10px; margin:2px;">Edit</button>
                             <button onclick="decrementQty(${item.id}, 1)" style="background-color:#6c757d; padding:5px 10px; margin:2px;">-1</button>
                             <button onclick="decrementQty(${item.id}, 2)" style="background-color:#6c757d; padding:5px 10px; margin:2px;">-2</button>
@@ -566,7 +585,7 @@
                 });
 
                 // Update photo count badges asynchronously
-                rendered.forEach(item => updatePhotoCountBadge(item.id, item.row, item.col));
+                rendered.forEach(item => updatePhotoCountBadge(item.id, item.box, item.row, item.col));
             };
         }
 
@@ -755,17 +774,20 @@
 
         let currentPhotoRow = null;
         let currentPhotoCol = null;
+        let currentPhotoBox = null;
 
-        function openPhotos(row, col) {
+        function openPhotos(box, row, col) {
+            currentPhotoBox = String(box || 'Wall 10 x 6');
             currentPhotoRow = String(row);
             currentPhotoCol = String(col);
-            document.getElementById('photoModalTitle').textContent = `Photos — Row ${row}, Col ${col}`;
+            document.getElementById('photoModalTitle').textContent = `Photos — ${currentPhotoBox}, Row ${row}, Col ${col}`;
             document.getElementById('photoModal').style.display = 'block';
-            loadPhotoGallery(currentPhotoRow, currentPhotoCol);
+            loadPhotoGallery(currentPhotoBox, currentPhotoRow, currentPhotoCol);
         }
 
         function closePhotoModal() {
             document.getElementById('photoModal').style.display = 'none';
+            currentPhotoBox = null;
             currentPhotoRow = null;
             currentPhotoCol = null;
         }
@@ -798,31 +820,31 @@
                     canvas.height = h;
                     canvas.getContext('2d').drawImage(img, 0, 0, w, h);
                     const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
-                    savePhoto(currentPhotoRow, currentPhotoCol, dataUrl);
+                    savePhoto(currentPhotoBox, currentPhotoRow, currentPhotoCol, dataUrl);
                 };
                 img.src = e.target.result;
             };
             reader.readAsDataURL(file);
         }
 
-        function savePhoto(row, col, dataUrl) {
+        function savePhoto(box, row, col, dataUrl) {
             const tx = db.transaction(['photos'], 'readwrite');
             const store = tx.objectStore('photos');
-            store.add({ row: String(row), col: String(col), dataUrl, timestamp: Date.now() });
+            store.add({ box: String(box || 'Wall 10 x 6'), row: String(row), col: String(col), dataUrl, timestamp: Date.now() });
             tx.oncomplete = () => {
-                loadPhotoGallery(row, col);
+                loadPhotoGallery(box, row, col);
                 displayItems();
             };
         }
 
-        function loadPhotoGallery(row, col) {
+        function loadPhotoGallery(box, row, col) {
             const gallery = document.getElementById('photoGallery');
             gallery.innerHTML = '<em style="color:#999;">Loading…</em>';
 
             const tx = db.transaction(['photos'], 'readonly');
             const store = tx.objectStore('photos');
             const index = store.index('by_location');
-            const request = index.getAll(IDBKeyRange.only([String(row), String(col)]));
+            const request = index.getAll(IDBKeyRange.only([String(box || 'Wall 10 x 6'), String(row), String(col)]));
 
             request.onsuccess = (e) => {
                 const photos = e.target.result;
@@ -863,16 +885,16 @@
             const store = tx.objectStore('photos');
             store.delete(photoId);
             tx.oncomplete = () => {
-                loadPhotoGallery(currentPhotoRow, currentPhotoCol);
+                loadPhotoGallery(currentPhotoBox, currentPhotoRow, currentPhotoCol);
                 displayItems();
             };
         }
 
-        function updatePhotoCountBadge(itemId, row, col) {
+        function updatePhotoCountBadge(itemId, box, row, col) {
             const tx = db.transaction(['photos'], 'readonly');
             const store = tx.objectStore('photos');
             const index = store.index('by_location');
-            const request = index.count(IDBKeyRange.only([String(row), String(col)]));
+            const request = index.count(IDBKeyRange.only([String(box || 'Wall 10 x 6'), String(row), String(col)]));
             request.onsuccess = (e) => {
                 const count = e.target.result;
                 const badge = document.getElementById(`photo-badge-${itemId}`);
@@ -1021,6 +1043,7 @@
 
                         photos.forEach(photo => {
                             const { id, ...photoData } = photo;
+                            if (!photoData.box) photoData.box = 'Wall 10 x 6';
                             photoStore.add(photoData);
                         });
 
